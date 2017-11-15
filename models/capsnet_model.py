@@ -31,6 +31,7 @@ class CapsNetModel(BaseModel):
             # Create PrimaryCapsules
             primarycaps = tf.layers.conv2d(conv1_out, 256, 9, 2)  # [batch_size, 6, 6, 256]
             primarycaps = tf.split(primarycaps, 8, axis=3)  # 32*[batch_size, 6, 6, 8]
+            # TODO - Continue from here - need squashing function
 
             # Create DigitCaps
 
@@ -42,4 +43,5 @@ class CapsNetModel(BaseModel):
         return output
 
     def learn_from_epoch(self):
+        # TODO - Implement this
 
