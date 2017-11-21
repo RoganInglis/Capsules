@@ -33,6 +33,11 @@ flags.DEFINE_float('learning_rate', 1e-3, 'The learning rate of SGD')
 flags.DEFINE_float('drop_keep_prob', 1.0, 'The dropout keep probability')
 flags.DEFINE_float('l2', 0.0, 'L2 regularisation strength')
 flags.DEFINE_integer('batch_size', 64, 'Batch size')
+flags.DEFINE_integer('n_primarycaps', 32, 'Number of PrimaryCaps in the model')
+flags.DEFINE_integer('d_primarycaps', 8, 'Dimension of PrimaryCaps in the model')
+flags.DEFINE_integer('n_digitcaps', 10, 'Number of DigitCaps in the model')
+flags.DEFINE_integer('d_digitcaps', 16, 'Dimension of DigitCaps in the model')
+
 
 # Training configuration
 flags.DEFINE_boolean('debug', False, 'Debug mode')

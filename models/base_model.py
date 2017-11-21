@@ -4,6 +4,7 @@ import json
 import tensorflow as tf
 import numpy as np
 from models import utils
+from tensorflow.examples.tutorials.mnist import input_data
 
 
 class BaseModel(object):
@@ -36,6 +37,9 @@ class BaseModel(object):
         self.learning_rate = self.config['learning_rate']
         self.l2 = self.config['l2']
         self.batch_size = self.config['batch_size']
+
+        # Load data
+        self.data = input_data.read_data_sets('MNIST_data', one_hot=True)
 
         # Now the child Model needs some custom parameters, to avoid any
         # inheritance hell with the __init__ function, the model
