@@ -47,6 +47,9 @@ class BaseModel(object):
         # Load data
         self.data = input_data.read_data_sets('MNIST_data', one_hot=True)
 
+        # Load data
+        self.data = input_data.read_data_sets('MNIST_data', one_hot=True)
+
         # Now the child Model needs some custom parameters, to avoid any
         # inheritance hell with the __init__ function, the model
         # will override this function completely

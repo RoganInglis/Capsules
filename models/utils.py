@@ -71,16 +71,10 @@ def dynamic_routing(u_hat, n_capsules, n_routing_iterations):
                 v_list[out_capsule] = squash(s, axis=1)  # [batch_size, output_capsule_dim]
 
                 # Update b
-
                 if routing_iteration != n_routing_iterations - 1:
                     b_update = tf.reduce_sum(tf.multiply(u_hat, tf.expand_dims(v_list[out_capsule], axis=1)),
                                              axis=2)
                     b[out_capsule] += b_update  # TODO - sort this out
-                """
-                    # Set b back to zero for next run
-                    b[:, :, out_capsule] = tf.assign(b[:, :, out_capsule], b_init[:, :, out_capsule])  # TODO - test this is actually working
-                else:
-                """
 
         # Concatenate output vectors for each capsule
         v = tf.stack(v_list, axis=1)  # [batch_size, n_capsules, output_capsule_dim]
@@ -219,3 +213,4 @@ def build_capsnet_graph(input_placeholders, primary_caps_args, digit_caps_args, 
         summaries['loss'] = tf.summary.scalar('loss', loss)
 
     return loss, predictions, accuracy, summaries
+
