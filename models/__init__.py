@@ -8,7 +8,7 @@ __all__ = [
 
 
 def make_model(config):
-    if config['agent_name'] in __all__:
+    if config['model_name'] in __all__:
         return globals()[config['model_name']](config)
     else:
         raise Exception('The model name %s does not exist' % config['model_name'])
