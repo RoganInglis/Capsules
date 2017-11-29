@@ -5,6 +5,7 @@ import tensorflow as tf
 import numpy as np
 from models import utils
 from tensorflow.examples.tutorials.mnist import input_data
+from tqdm import trange
 
 
 class BaseModel(object):
@@ -29,14 +30,24 @@ class BaseModel(object):
 
         # All models share some basics hyper parameters, this is the section where we
         # copy them into the model
+        self.model_name = self.config['model_name']
         self.result_dir = self.config['result_dir']
-        self.test_result_dir = self.config['test_result_dir']
+        self.validation_result_dir = self.config['validation_result_dir']
         self.max_iter = self.config['max_iter']
-        self.max_train_epochs = self.config['max_train_episodes']
+        self.max_train_epochs = self.config['max_train_epochs']
         self.drop_keep_prob = self.config['drop_keep_prob']
         self.learning_rate = self.config['learning_rate']
         self.l2 = self.config['l2']
         self.batch_size = self.config['batch_size']
+        self.image_dim = self.config['image_dim']
+        self.save_every = self.config['save_every']
+        self.test_every = self.config['test_every']
+        self.train_summary_every = self.config['train_summary_every']
+        self.validation_summary_every = self.config['validation_summary_every']
+        self.n_classes = 10
+
+        # Load data
+        self.data = input_data.read_data_sets('MNIST_data', one_hot=True)
 
         # Load data
         self.data = input_data.read_data_sets('MNIST_data', one_hot=True)
@@ -46,8 +57,13 @@ class BaseModel(object):
         # will override this function completely
         self.set_model_props(config)
 
+        # Set up global step
+        self.graph = tf.Graph()
+        with self.graph.as_default():
+            self.global_step = tf.Variable(0, trainable=False, name="global_step")
+
         # Again, child Model should provide its own build_graph function
-        self.graph = self.build_graph(tf.Graph())
+        self.graph = self.build_graph(self.graph)
 
         # Any operations that should be in the graph but are common to all models
         # can be added this way, here
@@ -60,7 +76,7 @@ class BaseModel(object):
         sess_config = tf.ConfigProto(gpu_options=gpu_options)
         self.sess = tf.Session(config=sess_config, graph=self.graph)
         self.train_summary_writer = tf.summary.FileWriter(self.result_dir, self.sess.graph)
-        self.test_summary_writer = tf.summary.FileWriter(self.test_result_dir, self.sess.graph)
+        self.validation_summary_writer = tf.summary.FileWriter(self.validation_result_dir, self.sess.graph)
 
         # This function is not always common to all models, that's why it's again
         # separated from the __init__ one
@@ -95,14 +111,14 @@ class BaseModel(object):
         # I like to separate the function to train per epoch and the function to train globally
         raise Exception('The learn_from_epoch function must be overriden by the agent')
 
-    def train(self, save_every=1):
+    def train(self):
         # This function is usually common to all your models
-        for self.epoch_id in range(0, self.max_train_epochs):
+        for self.epoch_id in trange(0, self.max_train_epochs, desc="Epochs", leave=False, ncols=100, unit="epoch"):
             # Perform all TensorBoard operations within learn_from_episode
             self.learn_from_epoch()
 
             # If you don't want to save during training, you can just pass a negative number
-            if save_every > 0 and self.epoch_id % save_every == 0:
+            if self.save_every > 0 and self.epoch_id % self.save_every == 0:
                 self.save()
 
     def save(self):
@@ -124,6 +140,7 @@ class BaseModel(object):
         # but making separate than the __init__ function allows it to be overidden cleanly
         # this is an example of such a function
         checkpoint = tf.train.get_checkpoint_state(self.result_dir)
+        tf.train.write_graph(self.graph, self.result_dir, self.model_name + ".pbtxt")
         if checkpoint is None:
             self.sess.run(self.init_op)
         else:
@@ -131,3 +148,4 @@ class BaseModel(object):
                 print('Loading the model from folder: %s' % self.result_dir)
             self.sess.run(self.init_op)
             self.saver.restore(self.sess, checkpoint.model_checkpoint_path)
+
