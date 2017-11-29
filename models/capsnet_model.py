@@ -63,6 +63,7 @@ class CapsNetModel(BaseModel):
             images, labels = self.data.train.next_batch(self.batch_size)
             feed_dict = {self.placeholders['image']: images,
                          self.placeholders['label']: labels}
+
             global_step = self.sess.run(self.global_step)  # TODO - add condition for max iteration or limit only by max epoch in main
 
             op_list = [self.train_op]
@@ -87,3 +88,4 @@ class CapsNetModel(BaseModel):
                 validation_summary = self.sess.run(self.validation_summary, feed_dict=validation_feed_dict)
 
                 self.validation_summary_writer.add_summary(validation_summary, global_step)
+

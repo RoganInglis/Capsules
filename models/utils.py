@@ -54,7 +54,6 @@ def dynamic_routing(u_hat, n_routing_iterations):
     with tf.name_scope('dynamic_routing'):
         # Create initial routing logits b
         input_shape = tf.shape(u_hat)
-        #input_shape_list = u_hat.get_shape().as_list()
         batch_size = input_shape[0]
         n_input_capsules = u_hat.get_shape().as_list()[1]
         n_out_capsules = u_hat.get_shape().as_list()[2]
@@ -163,7 +162,6 @@ def reconstruction_net(input_tensor, label_ph, image_dim=784):
         reconstruction = tf.layers.dense(fc_2_out, image_dim, activation=tf.nn.sigmoid)
 
         return reconstruction
-
 
 def reconstruction_loss(reconstructed_image, true_image):
     """
