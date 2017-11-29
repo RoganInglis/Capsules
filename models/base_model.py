@@ -68,7 +68,6 @@ class BaseModel(object):
         # Any operations that should be in the graph but are common to all models
         # can be added this way, here
         with self.graph.as_default():
-            self.global_step = tf.Variable(0, trainable=False, name='global_step')
             self.saver = tf.train.Saver(max_to_keep=50)
             self.init_op = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
 
