@@ -49,8 +49,8 @@ flags.DEFINE_integer('max_train_epochs', 1000, 'Max number of training epochs')
 flags.DEFINE_boolean('test', False, 'Load a model and compute test performance')
 flags.DEFINE_integer('save_every', 1, 'Epoch interval at which to save the agent during training')
 flags.DEFINE_integer('test_every', 2, 'Iteration interval at which to test the agent during training')
-flags.DEFINE_integer('train_summary_every', 5, 'Iteration interval at which to record a train summary during training')
-flags.DEFINE_integer('validation_summary_every', 50, 'Iteration interval at which to record a test summary during training')
+flags.DEFINE_integer('train_summary_every', 1, 'Iteration interval at which to record a train summary during training')
+flags.DEFINE_integer('validation_summary_every', 5, 'Iteration interval at which to record a test summary during training')
 
 
 # This is very important for TensorBoard

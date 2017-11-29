@@ -1,6 +1,7 @@
 from models import BaseModel
 import tensorflow as tf
 from models import utils
+from tqdm import trange
 
 
 class CapsNetModel(BaseModel):
@@ -25,8 +26,8 @@ class CapsNetModel(BaseModel):
     def build_graph(self, graph):
         with graph.as_default():
             # Create placeholders
-            self.placeholders = {'image': tf.placeholder(tf.float32, [None, self.image_dim]),
-                                 'label': tf.placeholder(tf.int32, [None, self.n_classes])}
+            self.placeholders = {'image': tf.placeholder(tf.float32, [None, self.image_dim], name='image'),
+                                 'label': tf.placeholder(tf.int32, [None, self.n_classes], name='label')}
 
             # Define main model graph
             primary_caps_args = [32, 8, 9, 2]
@@ -41,11 +42,13 @@ class CapsNetModel(BaseModel):
 
             # Define optimiser
             self.optim = tf.train.AdamOptimizer(self.learning_rate)
-            self.train_op = self.optim.minimize(self.loss)
+            self.train_op = self.optim.minimize(self.loss, global_step=self.global_step)
 
             # Set up summaries
             self.train_summary = tf.summary.merge([self.summaries['accuracy'],
-                                                   self.summaries['loss']])
+                                                   self.summaries['loss'],
+                                                   *self.summaries['general']])
+
             self.validation_summary = tf.summary.merge([self.summaries['accuracy'],
                                                        self.summaries['loss']])
 
@@ -56,16 +59,17 @@ class CapsNetModel(BaseModel):
         return output
 
     def learn_from_epoch(self):
-        for iteration in range(self.data.train.num_examples//self.batch_size):
+        for _ in range(self.data.train.num_examples//self.batch_size):
             # Get batch
             images, labels = self.data.train.next_batch(self.batch_size)
             feed_dict = {self.placeholders['image']: images,
                          self.placeholders['label']: labels}
 
+            global_step = self.sess.run(self.global_step)  # TODO - add condition for max iteration or limit only by max epoch in main
+
             op_list = [self.train_op]
 
-            train_summary_now = self.train_summary_every > 0 and self.iter % self.train_summary_every == 0
-
+            train_summary_now = self.train_summary_every > 0 and global_step % self.train_summary_every == 0
             if train_summary_now:
                 op_list.append(self.train_summary)
 
@@ -73,10 +77,9 @@ class CapsNetModel(BaseModel):
 
             # Add to tensorboard
             if train_summary_now:
-                self.train_summary_writer.add_summary(train_out[1], self.iter)
+                self.train_summary_writer.add_summary(train_out[1], global_step)
 
-            validate_now = self.validation_summary_every > 0 and self.iter % self.validation_summary_every == 0
-
+            validate_now = self.validation_summary_every > 0 and global_step % self.validation_summary_every == 0
             if validate_now:
                 # Only run 1 batch of validation data while training for speed; can do full test later
                 validation_images, validation_labels = self.data.validation.next_batch(self.batch_size)
@@ -85,6 +88,4 @@ class CapsNetModel(BaseModel):
 
                 validation_summary = self.sess.run(self.validation_summary, feed_dict=validation_feed_dict)
 
-                self.validation_summary_writer.add_summary(validation_summary, self.iter)
-
-            self.iter += 1  # TODO - add condition for max iteration or limit only by max epoch in main
+                self.validation_summary_writer.add_summary(validation_summary, global_step)

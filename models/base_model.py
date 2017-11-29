@@ -5,6 +5,7 @@ import tensorflow as tf
 import numpy as np
 from models import utils
 from tensorflow.examples.tutorials.mnist import input_data
+from tqdm import trange
 
 
 class BaseModel(object):
@@ -29,6 +30,7 @@ class BaseModel(object):
 
         # All models share some basics hyper parameters, this is the section where we
         # copy them into the model
+        self.model_name = self.config['model_name']
         self.result_dir = self.config['result_dir']
         self.validation_result_dir = self.config['validation_result_dir']
         self.max_iter = self.config['max_iter']
@@ -55,8 +57,13 @@ class BaseModel(object):
         # will override this function completely
         self.set_model_props(config)
 
+        # Set up global step
+        self.graph = tf.Graph()
+        with self.graph.as_default():
+            self.global_step = tf.Variable(0, trainable=False, name="global_step")
+
         # Again, child Model should provide its own build_graph function
-        self.graph = self.build_graph(tf.Graph())
+        self.graph = self.build_graph(self.graph)
 
         # Any operations that should be in the graph but are common to all models
         # can be added this way, here
@@ -107,7 +114,7 @@ class BaseModel(object):
 
     def train(self):
         # This function is usually common to all your models
-        for self.epoch_id in range(0, self.max_train_epochs):
+        for self.epoch_id in trange(0, self.max_train_epochs, desc="Epochs", leave=False, ncols=100, unit="epoch"):
             # Perform all TensorBoard operations within learn_from_episode
             self.learn_from_epoch()
 
@@ -134,6 +141,7 @@ class BaseModel(object):
         # but making separate than the __init__ function allows it to be overidden cleanly
         # this is an example of such a function
         checkpoint = tf.train.get_checkpoint_state(self.result_dir)
+        tf.train.write_graph(self.graph, self.result_dir, self.model_name + ".pbtxt")
         if checkpoint is None:
             self.sess.run(self.init_op)
             self.iter = 0

@@ -12,73 +12,80 @@ def squash(tensor, axis=0):
     return squashed_tensor
 
 
-def capsule_affine_transform(input_tensor, out_capsule_dim, scope=None, reuse=None):
+def capsule_affine_transform(input_tensor, n_out_capsules, out_capsule_dim, scope=None, reuse=None):
     """
     Performs the affine transform for each capsule output -> next capsule input
     :param input_tensor: Tensor with shape [batch_size, n_in_capsules, in_capsule_dim]  ([-1, 6*6*32, 8] in paper)
+    :param n_out_capsules: number of capsules in the next layer
     :param out_capsule_dim: dimension of the output (next capsule input) vectors
     :param scope:
     :param reuse:
-    :return: Tensor with shape [batch_size, n_in_capsules, out_capsule_dim]  ([-1, 6*6*32, 16] in paper)
+    :return: Tensor with shape [batch_size, n_in_capsules, n_out_capsules, out_capsule_dim]  ([-1, 6*6*32, 10, 16] in paper)
     """
-    # TODO - implementing this in the straight forward but inefficient way for now; should re-implement using tf.scan
     input_shape = input_tensor.get_shape().as_list()
 
+    # Tile and expand input for matmul for each output capsule
+    expanded_input = tf.expand_dims(input_tensor, -2)  # [batch_size, n_in_capsules, 1, in_capsule_dim]
+    expanded_input = tf.expand_dims(expanded_input, -2)  # [batch_size, n_in_capsules, 1, 1, in_capsule_dim]
+    tiled_input = tf.tile(expanded_input, [1, 1, n_out_capsules, 1, 1])  # TODO - Memory inefficient to have to tile. Is there a better way?
+
     # Create weight variables
-    weights = tf.Variable(tf.random_normal([input_shape[1], input_shape[2], out_capsule_dim]), 'affine_weights')
+    weight_shape = [1, input_shape[1], n_out_capsules, input_shape[2], out_capsule_dim]
+    weights = tf.Variable(tf.random_normal(weight_shape), name='affine_weights')  # [1, n_in_caps, n_out_caps, in_cap_dim, out_cap_dim]
 
-    # Unstack input_tensor and weights
-    input_tensor_unstacked = tf.unstack(input_tensor, axis=1)  # n_in_capsules*[batch_size, in_capsule_dim]
-    weights_unstacked = tf.unstack(weights, axis=0)  # n_in_capsules*[in_capsule_dim, out_capsule_dim]
+    # Tile weights for batch  TODO - Again memory inefficient to have to tile if there is a better way
+    tiled_weights = tf.tile(weights, [tf.shape(input_tensor)[0], 1, 1, 1, 1])  # [batch_size, n_in_caps, n_out_caps, in_cap_dim, out_cap_dim]
 
-    # Iterate through unstacked tensors and perform affine transforms
-    transformed_input = []
-    for u, W in zip(input_tensor_unstacked, weights_unstacked):
-        transformed_input.append(tf.matmul(u, W))
-
-    output = tf.stack(transformed_input, axis=1)  # [batch_size, n_in_capsules, out_capsule_dim]
+    matmul_output = tf.matmul(tiled_input, tiled_weights)
+    output = tf.squeeze(matmul_output, -2)  # [batch_size, n_in_caps, n_out_caps, out_capsule_dim]
 
     return output
 
 
-def dynamic_routing(u_hat, n_capsules, n_routing_iterations):
+def dynamic_routing(u_hat, n_routing_iterations):
     """
     Sets up the TensorFlow graph for the dynamic routing between capsules section of the CapsNet architecture (although
     it should be usable for dynamic routing between arbitrary capsules) as presented in 'Dynamic routing between capsules'
-    :param u_hat: Tensor with shape [batch_size, n_input_capsules, transformed_capsule_dimension] (-1, 6*6*32, 16)
-    :param n_capsules: Int - Number of output capsules (10 in paper)
+    :param u_hat: Tensor with shape [batch_size, n_input_capsules, n_output_capsules, transformed_capsule_dimension] (-1, 6*6*32, 10, 16)
     :param n_routing_iterations: Int - Number of routing iterations to perform (3 in paper)
-    :return: capsule output Tensor with shape [batch_size, n_capsules, out_capsule_dimension] ([-1, 10, 16] in paper)
+    :return: capsule output Tensor with shape [batch_size, n_output_capsules, out_capsule_dimension] ([-1, 10, 16] in paper)
     """
     with tf.name_scope('dynamic_routing'):
         # Create initial routing logits b
         input_shape = tf.shape(u_hat)
+        batch_size = input_shape[0]
+        n_input_capsules = u_hat.get_shape().as_list()[1]
+        n_out_capsules = u_hat.get_shape().as_list()[2]
 
-        b = [tf.zeros([input_shape[0], u_hat.get_shape().as_list()[1]]) for _ in range(n_capsules)]  # TODO - double check this works as intended
+        b = tf.zeros([batch_size, n_input_capsules, n_out_capsules, 1])
 
-        # Initialise list of output vectors
-        v_list = list(range(n_capsules))
+        u_hat_stopped = tf.stop_gradient(u_hat)
 
-        for routing_iteration in range(n_routing_iterations):
-            for out_capsule in range(n_capsules):
+        for routing_iteration in range(n_routing_iterations - 1):
+            with tf.name_scope("routing_iteration_{}".format(routing_iteration)):
                 # Compute c as softmax of b
-                c = tf.expand_dims(tf.nn.softmax(b[out_capsule], dim=1), 2)  # [batch_size, n_input_capsules, 1]
+                c = tf.nn.softmax(b, dim=1)
 
                 # Compute s as sum of input capsule vectors scaled by c
-                s = tf.reduce_sum(tf.multiply(u_hat, c), axis=1)  # [batch_size, output_capsule_dim]
+                s = tf.reduce_sum(tf.multiply(u_hat_stopped, c), axis=1, keep_dims=True)  # [batch_size, 1, n_output_capsules, output_capsule_dim]
 
                 # Apply squash non-linearity to get output v
-                v_list[out_capsule] = squash(s, axis=1)  # [batch_size, output_capsule_dim]
+                v = squash(s, axis=3)  # [batch_size, 1, n_output_capsules, output_capsule_dim]
 
                 # Update b
-                if routing_iteration != n_routing_iterations - 1:
-                    b_update = tf.reduce_sum(tf.multiply(u_hat, tf.expand_dims(v_list[out_capsule], axis=1)),
-                                             axis=2)
-                    b[out_capsule] += b_update  # TODO - sort this out
+                b_update = tf.reduce_sum(tf.multiply(u_hat, v), axis=3, keep_dims=True)
+                b += b_update
 
-        # Concatenate output vectors for each capsule
-        v = tf.stack(v_list, axis=1)  # [batch_size, n_capsules, output_capsule_dim]
+        with tf.name_scope("routing_iteration_{}".format(n_routing_iterations - 1)):
+            # Compute c as softmax of b
+            c = tf.nn.softmax(b, dim=1)
 
+            # Compute s as sum of input capsule vectors scaled by c
+            s = tf.reduce_sum(tf.multiply(u_hat, c), axis=1,
+                              keep_dims=True)  # [batch_size, 1, n_output_capsules, output_capsule_dim]
+
+            # Apply squash non-linearity to get output v
+            v = tf.squeeze(squash(s, axis=3), 1)  # [batch_size, n_output_capsules, output_capsule_dim]
     return v
 
 
@@ -103,26 +110,27 @@ def primary_caps(input_tensor, n_channels, capsule_dim, kernel_shape, strides):
     return conv_out
 
 
-def digit_caps(input_tensor, n_capsules, capsule_dim, n_routing_iterations):
+def digit_caps(u, n_capsules, capsule_dim, n_routing_iterations):
     # Reshape input for affine transform to [batch_size, -1, input_capsule_dim]
-    input_shape = input_tensor.get_shape().as_list()
-    input_tensor = tf.reshape(input_tensor, [-1, input_shape[1]*input_shape[2]*input_shape[3], input_shape[4]])  # [batch_size, 6*6*32, 8]
+    input_shape = u.get_shape().as_list()
+    u = tf.reshape(u, [-1, input_shape[1] * input_shape[2] * input_shape[3], input_shape[4]])  # [batch_size, 6*6*32, 8]
 
     # Input affine transforms
-    transformed_input = capsule_affine_transform(input_tensor, capsule_dim)  # [batch_size, 6*6*32, 16]
+    u_hat = capsule_affine_transform(u, n_capsules, capsule_dim)  # [batch_size, 6*6*32, 10, 16]
 
     # Dynamic routing
-    routed_output = dynamic_routing(transformed_input, n_capsules, n_routing_iterations)
+    v = dynamic_routing(u_hat, n_routing_iterations)  # [batch_size, 10, 16]
 
-    return routed_output
+    return v
 
 
 def margin_loss(preds, label_ph, margins, lambda_m):
     """
     Constructs the TensorFlow graph for the margin loss described in 'Dynamic routing between capsules'
-    :param input_tensor: Tensor with shape [batch_size, n_classes, capsule_dim]  ([-1, 10, 16] in paper)
+    :param preds: Tensor with shape [batch_size, n_classes, capsule_dim]  ([-1, 10, 16] in paper)
     :param label_ph: Placeholder for the true labels in one-hot format
     :param margins: List containing both the high and low margins in that order (i.e. [0.9, 0.1] for the paper margins)
+    :param lambda_m: Down weighting parameter for absent classes
     :return: The margin loss as a scalar tensor
     """
     loss = tf.cast(label_ph, tf.float32)*tf.square(tf.maximum(0., margins[0] - preds)) + lambda_m*tf.cast((1 - label_ph), tf.float32)*tf.square(tf.maximum(0., preds - margins[1]))
@@ -140,18 +148,19 @@ def reconstruction_net(input_tensor, label_ph, image_dim=784):
     :param image_dim: dimension of the image to reconstruct (i.e. total number of pixels - 784 for paper/mnist)
     :return: Reconstructed images as a Tensor with shape [batch_size, image_dims] (i.e. the flattened image)
     """
-    # First mask input so only output vector of correct capsule is used for reconstruction
-    masked_input = tf.multiply(input_tensor, tf.expand_dims(tf.cast(label_ph, tf.float32), axis=2))  # [batch_size, n_classes, capsule_dim]
-    masked_input = tf.reduce_sum(masked_input, axis=1)  # [batch_size, capsule_dim]
+    with tf.variable_scope("reconstruction_net"):
+        # First mask input so only output vector of correct capsule is used for reconstruction
+        masked_input = tf.multiply(input_tensor, tf.expand_dims(tf.cast(label_ph, tf.float32), axis=2))  # [batch_size, n_classes, capsule_dim]
+        masked_input = tf.reduce_sum(masked_input, axis=1)  # [batch_size, capsule_dim]
 
-    # Define fully connected layers for reconstruction
-    fc_1_out = tf.layers.dense(masked_input, 512, activation=tf.nn.relu)
+        # Define fully connected layers for reconstruction
+        fc_1_out = tf.layers.dense(masked_input, 512, activation=tf.nn.relu)
 
-    fc_2_out = tf.layers.dense(fc_1_out, 1024, activation=tf.nn.relu)
+        fc_2_out = tf.layers.dense(fc_1_out, 1024, activation=tf.nn.relu)
 
-    reconstruction = tf.layers.dense(fc_2_out, image_dim, activation=tf.nn.sigmoid)
+        reconstruction = tf.layers.dense(fc_2_out, image_dim, activation=tf.nn.sigmoid)
 
-    return reconstruction
+        return reconstruction
 
 
 def reconstruction_loss(reconstructed_image, true_image):
@@ -171,6 +180,7 @@ def build_capsnet_graph(input_placeholders, primary_caps_args, digit_caps_args, 
     # Initalise summaries dict - using dict so that we can merge only select summaries; don't want image summaries all
     # the time
     summaries = {}
+    summaries["general"] = []
 
     # Reshape flattened image tensor to 2D
     images = tf.reshape(input_placeholders['image'], [-1, 28, 28, 1])
@@ -182,35 +192,39 @@ def build_capsnet_graph(input_placeholders, primary_caps_args, digit_caps_args, 
     summaries['conv1_out_channels'] = [tf.summary.image('conv1_out_channels', x) for x in tf.unstack(conv1_out, axis=3)]
 
     # Create PrimaryCapsules
-    with tf.name_scope('PrimaryCaps'):
+    with tf.variable_scope('PrimaryCaps'):
         primary_caps_out = primary_caps(conv1_out, *primary_caps_args)
 
     # Create DigitCaps
-    with tf.name_scope('DigitCaps'):
-        digit_caps_out = digit_caps(primary_caps_out, *digit_caps_args)
+    with tf.variable_scope('DigitCaps'):
+        digit_caps_out = digit_caps(primary_caps_out, *digit_caps_args)  # [batch_size, n_capsules, n_capsule_dims]
 
     probs = tf.norm(digit_caps_out, axis=2)  # [batch_size, n_classes]
-    predictions = tf.argmax(probs, axis=1)
-    accuracy = tf.reduce_mean(tf.cast(tf.equal(tf.argmax(input_placeholders['label'], axis=1), predictions), tf.int32), axis=0)
-    summaries['accuracy'] = tf.summary.scalar('accuracy', accuracy)
+    with tf.name_scope("accuracy"):
+        predictions = tf.argmax(probs, axis=1)
+        labels = tf.argmax(input_placeholders['label'], axis=1)
+        correct = tf.cast(tf.equal(labels, predictions), tf.int32)
+        accuracy = tf.reduce_sum(correct)/tf.shape(correct)[0]  # reduce_mean not working here for some reason
+        summaries['accuracy'] = tf.summary.scalar('accuracy', accuracy)
 
     # Create Loss
-    with tf.name_scope('Loss'):
+    with tf.variable_scope('Loss'):
         # Create Margin Loss
-        with tf.name_scope('MarginLoss'):
+        with tf.variable_scope('MarginLoss'):
             m_loss = margin_loss(probs, input_placeholders['label'], *margin_loss_args)
 
         # Create Reconstruction Loss
-        with tf.name_scope('ReconstructionLoss'):
-            with tf.name_scope('image_reconstruction'):
-                reconstructed_image = reconstruction_net(digit_caps_out, input_placeholders['label'], image_dim)
-                summaries['reconstructed_images'] = tf.summary.image('reconstructed_images',
-                                                                     tf.reshape(reconstructed_image, [-1, 28, 28]))
+        with tf.variable_scope('ReconstructionLoss'):
+            reconstructed_image = reconstruction_net(digit_caps_out, input_placeholders['label'], image_dim)
+            summaries['reconstructed_images'] = tf.summary.image('reconstructed_images',
+                                                                 tf.reshape(reconstructed_image, [-1, 28, 28, 1]))
 
             r_loss = reconstruction_loss(reconstructed_image, input_placeholders['image'])
 
         loss = m_loss + lambda_reconstruction*r_loss
         summaries['loss'] = tf.summary.scalar('loss', loss)
+        summaries["general"].append(tf.summary.scalar("margin_loss", m_loss))
+        summaries["general"].append(tf.summary.scalar("reconstruction_loss", r_loss))
 
     return loss, predictions, accuracy, summaries
 
