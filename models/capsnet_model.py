@@ -26,8 +26,8 @@ class CapsNetModel(BaseModel):
     def build_graph(self, graph):
         with graph.as_default():
             # Create placeholders
-            self.placeholders = {'image': tf.placeholder(tf.float32, [None, self.image_dim]),
-                                 'label': tf.placeholder(tf.int32, [None, self.n_classes])}
+            self.placeholders = {'image': tf.placeholder(tf.float32, [None, self.image_dim], name='image'),
+                                 'label': tf.placeholder(tf.int32, [None, self.n_classes], name='label')}
 
             # Define main model graph
             primary_caps_args = [32, 8, 9, 2]

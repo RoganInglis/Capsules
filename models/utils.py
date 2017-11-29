@@ -20,7 +20,7 @@ def capsule_affine_transform(input_tensor, n_out_capsules, out_capsule_dim, scop
     :param out_capsule_dim: dimension of the output (next capsule input) vectors
     :param scope:
     :param reuse:
-    :return: Tensor with shape [batch_size, n_in_capsules, n_out_capsules, out_capsule_dim]  ([-1, 6*6*32, 16] in paper)
+    :return: Tensor with shape [batch_size, n_in_capsules, n_out_capsules, out_capsule_dim]  ([-1, 6*6*32, 10, 16] in paper)
     """
     input_shape = input_tensor.get_shape().as_list()
 
@@ -50,7 +50,6 @@ def dynamic_routing(u_hat, n_routing_iterations):
     :param n_routing_iterations: Int - Number of routing iterations to perform (3 in paper)
     :return: capsule output Tensor with shape [batch_size, n_output_capsules, out_capsule_dimension] ([-1, 10, 16] in paper)
     """
-    # TODO - redo this with new u_hat shape etc.
     with tf.name_scope('dynamic_routing'):
         # Create initial routing logits b
         input_shape = tf.shape(u_hat)
@@ -163,6 +162,7 @@ def reconstruction_net(input_tensor, label_ph, image_dim=784):
 
         return reconstruction
 
+
 def reconstruction_loss(reconstructed_image, true_image):
     """
     Constructs the reconstruction loss for the CapsNet architecture
@@ -204,23 +204,20 @@ def build_capsnet_graph(input_placeholders, primary_caps_args, digit_caps_args, 
         predictions = tf.argmax(probs, axis=1)
         labels = tf.argmax(input_placeholders['label'], axis=1)
         correct = tf.cast(tf.equal(labels, predictions), tf.int32)
-        accuracy = tf.reduce_sum(correct)/tf.shape(correct)[0]
+        accuracy = tf.reduce_sum(correct)/tf.shape(correct)[0]  # reduce_mean not working here for some reason
         summaries['accuracy'] = tf.summary.scalar('accuracy', accuracy)
-        summaries["general"].append(tf.summary.histogram("labels", labels))
-        summaries["general"].append(tf.summary.histogram("predictions", predictions))
-        summaries["general"].append(tf.summary.histogram("correct", correct))
 
     # Create Loss
-    with tf.name_scope('Loss'):
+    with tf.variable_scope('Loss'):
         # Create Margin Loss
-        with tf.name_scope('MarginLoss'):
+        with tf.variable_scope('MarginLoss'):
             m_loss = margin_loss(probs, input_placeholders['label'], *margin_loss_args)
 
         # Create Reconstruction Loss
         with tf.variable_scope('ReconstructionLoss'):
             reconstructed_image = reconstruction_net(digit_caps_out, input_placeholders['label'], image_dim)
             summaries['reconstructed_images'] = tf.summary.image('reconstructed_images',
-                                                                 tf.reshape(reconstructed_image, [-1, 28, 28]))
+                                                                 tf.reshape(reconstructed_image, [-1, 28, 28, 1]))
 
             r_loss = reconstruction_loss(reconstructed_image, input_placeholders['image'])
 
