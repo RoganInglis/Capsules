@@ -50,6 +50,7 @@ class CapsNetModel(BaseModel):
             self.train_summary = tf.summary.merge([self.summaries['accuracy'],
                                                    self.summaries['loss'],
                                                    *self.summaries['general']])
+
             self.validation_summary = tf.summary.merge([self.summaries['accuracy'],
                                                        self.summaries['loss']])
 
@@ -114,4 +115,3 @@ class CapsNetModel(BaseModel):
                 validation_summary = self.sess.run(self.validation_summary, feed_dict=validation_feed_dict)
 
                 self.validation_summary_writer.add_summary(validation_summary, global_step)
-

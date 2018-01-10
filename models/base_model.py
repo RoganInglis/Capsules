@@ -137,6 +137,7 @@ class BaseModel(object):
         tf.train.write_graph(self.graph, self.result_dir, self.model_name + ".pbtxt")
         if checkpoint is None:
             self.sess.run(self.init_op)
+            self.iter = 0
         else:
             if self.config['debug']:
                 print('Loading the model from folder: %s' % self.result_dir)
