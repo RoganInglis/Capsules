@@ -2,10 +2,7 @@ import os
 import copy
 import json
 import tensorflow as tf
-import numpy as np
-from models import utils
 from tensorflow.examples.tutorials.mnist import input_data
-from tqdm import trange
 
 
 class BaseModel(object):
@@ -45,9 +42,6 @@ class BaseModel(object):
         self.train_summary_every = self.config['train_summary_every']
         self.validation_summary_every = self.config['validation_summary_every']
         self.n_classes = 10
-
-        # Load data
-        self.data = input_data.read_data_sets('MNIST_data', one_hot=True)
 
         # Load data
         self.data = input_data.read_data_sets('MNIST_data', one_hot=True)
@@ -113,7 +107,7 @@ class BaseModel(object):
 
     def train(self):
         # This function is usually common to all your models
-        for self.epoch_id in trange(0, self.max_train_epochs, desc="Epochs", leave=False, ncols=100, unit="epoch"):
+        for self.epoch_id in range(0, self.max_train_epochs):
             # Perform all TensorBoard operations within learn_from_episode
             self.learn_from_epoch()
 

@@ -33,8 +33,8 @@ flags.DEFINE_float('learning_rate', 1e-3, 'The learning rate of SGD')
 flags.DEFINE_float('drop_keep_prob', 1.0, 'The dropout keep probability')
 flags.DEFINE_float('l2', 0.0, 'L2 regularisation strength')
 flags.DEFINE_float('lambda_reconstruction', 0.0005, 'Reconstruction regularisation strength')
-flags.DEFINE_integer('batch_size', 32, 'Batch size')
-flags.DEFINE_integer('n_primarycaps', 32, 'Number of PrimaryCaps in the model')
+flags.DEFINE_integer('batch_size', 16, 'Batch size')
+flags.DEFINE_integer('n_primarycaps', 32, 'Number of PrimaryCaps in the model (defines size of the square grid)')
 flags.DEFINE_integer('d_primarycaps', 8, 'Dimension of PrimaryCaps in the model')
 flags.DEFINE_integer('n_digitcaps', 10, 'Number of DigitCaps in the model')
 flags.DEFINE_integer('d_digitcaps', 16, 'Dimension of DigitCaps in the model')
@@ -59,6 +59,9 @@ flags.DEFINE_integer('validation_summary_every', 5, 'Iteration interval at which
 flags.DEFINE_string('result_dir', project_dir + '/results/' + flags.FLAGS.model_name + '/' +
                     str(int(time.time())),
                     'Name of the directory to store/log the model (if it exists, the model will be loaded from it)')
+
+#flags.DEFINE_string('result_dir', project_dir + '/results/' + 'CapsNetModel' + '/' + '1512499509', 'Name of the directory to store/log the model (if it exists, the model will be loaded from it)')
+
 flags.DEFINE_string('validation_result_dir', project_dir + '/results/' + flags.FLAGS.model_name + '/' +
                     str(int(time.time())) + '/validation',
                     'Name of the directory to store/log the model validation results (for TensorBoard)')

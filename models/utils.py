@@ -1,4 +1,8 @@
 import tensorflow as tf
+import numpy as np
+import matplotlib.pyplot as plt
+from tqdm import tqdm
+import os
 
 
 def squash(tensor, axis=0):
@@ -27,13 +31,13 @@ def capsule_affine_transform(input_tensor, n_out_capsules, out_capsule_dim, scop
     # Tile and expand input for matmul for each output capsule
     expanded_input = tf.expand_dims(input_tensor, -2)  # [batch_size, n_in_capsules, 1, in_capsule_dim]
     expanded_input = tf.expand_dims(expanded_input, -2)  # [batch_size, n_in_capsules, 1, 1, in_capsule_dim]
-    tiled_input = tf.tile(expanded_input, [1, 1, n_out_capsules, 1, 1])  # TODO - Memory inefficient to have to tile. Is there a better way?
+    tiled_input = tf.tile(expanded_input, [1, 1, n_out_capsules, 1, 1])  # TODO - Is there a better way than tiling?
 
     # Create weight variables
     weight_shape = [1, input_shape[1], n_out_capsules, input_shape[2], out_capsule_dim]
     weights = tf.Variable(tf.random_normal(weight_shape), name='affine_weights')  # [1, n_in_caps, n_out_caps, in_cap_dim, out_cap_dim]
 
-    # Tile weights for batch  TODO - Again memory inefficient to have to tile if there is a better way
+    # Tile weights for batch
     tiled_weights = tf.tile(weights, [tf.shape(input_tensor)[0], 1, 1, 1, 1])  # [batch_size, n_in_caps, n_out_caps, in_cap_dim, out_cap_dim]
 
     matmul_output = tf.matmul(tiled_input, tiled_weights)
@@ -57,9 +61,10 @@ def dynamic_routing(u_hat, n_routing_iterations):
         n_input_capsules = u_hat.get_shape().as_list()[1]
         n_out_capsules = u_hat.get_shape().as_list()[2]
 
-        b = tf.zeros([batch_size, n_input_capsules, n_out_capsules, 1])  # TODO - double check this works as intended
+        b = tf.zeros([batch_size, n_input_capsules, n_out_capsules, 1])
 
-        u_hat_stopped = tf.stop_gradient(u_hat)
+        #u_hat_stopped = tf.stop_gradient(u_hat)
+        u_hat_stopped = u_hat  # TODO - which of these is correct? (both give good results...)
 
         for routing_iteration in range(n_routing_iterations - 1):
             with tf.name_scope("routing_iteration_{}".format(routing_iteration)):
@@ -217,7 +222,7 @@ def build_capsnet_graph(input_placeholders, primary_caps_args, digit_caps_args, 
         with tf.variable_scope('ReconstructionLoss'):
             reconstructed_image = reconstruction_net(digit_caps_out, input_placeholders['label'], image_dim)
             summaries['reconstructed_images'] = tf.summary.image('reconstructed_images',
-                                                                 tf.reshape(reconstructed_image, [-1, 28, 28, 1]))
+                                                                 tf.reshape(reconstructed_image[:3], [-1, 28, 28, 1]))
 
             r_loss = reconstruction_loss(reconstructed_image, input_placeholders['image'])
 
@@ -226,5 +231,14 @@ def build_capsnet_graph(input_placeholders, primary_caps_args, digit_caps_args, 
         summaries["general"].append(tf.summary.scalar("margin_loss", m_loss))
         summaries["general"].append(tf.summary.scalar("reconstruction_loss", r_loss))
 
-    return loss, predictions, accuracy, summaries
+    return loss, predictions, accuracy, correct, summaries
 
+
+def save_mnist_as_image(mnist_batch, outdir, name="image"):
+    # If outdir doesn't exist then create it
+    if not os.path.exists(outdir):
+        os.makedirs(outdir)
+
+    for i, image in enumerate(tqdm(mnist_batch, desc="Saving images", leave=False, ncols=100)):
+        image = np.squeeze(image)
+        plt.imsave("{}/{}_{}.png".format(outdir, name, i), image)
